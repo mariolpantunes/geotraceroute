@@ -43,7 +43,7 @@ header() {
 <Style id="source">
 <IconStyle>
 <Icon>
-<href>etnasss.jpg</href>
+<href>https://raw.githubusercontent.com/mariolpantunes/kmltraceroute/master/icons/flag.png</href>
 </Icon>
 </IconStyle>
 </Style>
@@ -51,7 +51,7 @@ header() {
 <Style id="jump">
 <IconStyle>
 <Icon>
-<href>etnasss.jpg</href>
+<href>https://raw.githubusercontent.com/mariolpantunes/kmltraceroute/master/icons/server.png</href>
 </Icon>
 </IconStyle>
 </Style>
@@ -59,7 +59,7 @@ header() {
 <Style id="destination">
 <IconStyle>
 <Icon>
-<href>etnasss.jpg</href>
+<href>https://raw.githubusercontent.com/mariolpantunes/kmltraceroute/master/icons/destination.png</href>
 </Icon>
 </IconStyle>
 </Style>
@@ -92,7 +92,7 @@ getIP4location() {
     fi
    
     if [ -z "$C" ] && [ -e "$cachedir/GeoIP-cache.txt" ] ; then
-    C=$(grep "^$IP " "$cachedir/GeoIP-cache.txt")
+    C=$(grep -m 1 "^$IP " "$cachedir/GeoIP-cache.txt")
     fi
 
     if [ "$C" ]; then
@@ -129,17 +129,27 @@ getIP4location() {
 tracehost() {
     targetip="$1"
     targetname="$2"
-    LONGLATS=""
+    local LONGLATS=""
+    local ICON=""
     targetreverse=$(getent hosts "$targetip"|awk '{print $2}')
     echo "<!-- traceroute for $targetname / $targetreverse [$targetip] -->"
-    for IP in $(gettraceroute4 "$targetip"); do
+    IPS=($(gettraceroute4 "$targetip"))
+    for IP in "${IPS[@]}"; do
     getIP4location "$IP"
 	name=$(getent hosts "$IP" | awk '{print $2}')
 	if [ "$LONG" ] ; then
 	    LONGLAT="${LONG},${LAT} "
 	    LONGLATS="${LONGLATS}${LONGLAT}\n"
+
+        ICON="jump"
+
+        if [ "$IP" = "${IPS[0]}" ]; then
+            ICON="source"
+        fi
+
 	    if [ "$targetip" = "$IP" ]; then
 		labelname="$targetname"
+        ICON="destination"
 	    else
 		labelname=""
 	    fi
@@ -147,8 +157,9 @@ tracehost() {
 <Placemark>
   <name>$labelname</name>
   <description>GeoIP position for $name [$IP]</description>
+  <styleUrl>#$ICON</styleUrl> 
   <Point><coordinates>$LONGLAT</coordinates></Point>
-</Placemark>"
+</Placemark>
 EOF
 	else
 	    echo "<!-- missing GeoIP info for $name [$IP] -->"
