@@ -86,6 +86,7 @@ gettraceroute4() {
 
 getIP4location() {
     local C=""
+    local IP=$1
     
     if [ -e GeoIP-override.txt ] ; then
 	C="$(grep "^$IP " GeoIP-override.txt | cut -d"#" -f1)"
@@ -100,15 +101,9 @@ getIP4location() {
 	LAT=$(echo "$C" |cut -d" " -f3)
 	return
     fi
-    # Remove very inaccurate info
-    #GEOIP=$(geoiplookup -f GeoLiteCity.dat $IP);
-    LONG=
-    LAT=
-    #if [ "$GEOIP" ] && [ "$(echo "$GEOIP" | grep -q "IP Address not found"; echo $?;)" != "0" ]; then
-	#LONG=$(echo "$GEOIP" | cut -d, -f 8)
-	#LAT=$(echo "$GEOIP" | cut -d, -f 7)
-	#echo $IP $LONG $LAT >> "$cachedir/GeoIP-cache.txt"
-    #fi
+
+    LONG=""
+    LAT=""
     
     if [ "$default_gateway" = "$IP" ]; then
     url=https://freegeoip.live/json/
@@ -116,14 +111,11 @@ getIP4location() {
     url=https://freegeoip.live/json/$IP
     fi
     
-    #echo -e "$url"
     LOCATION=$(curl -s $url | jq -r '.longitude, .latitude')
-    #echo -e "$LOCATION"
     if [ "$LOCATION" ]; then
     read LONG LAT < <(echo $LOCATION)
     echo $IP $LONG $LAT >> "$cachedir/GeoIP-cache.txt"
     fi
-
 }
 
 tracehost() {
@@ -134,49 +126,64 @@ tracehost() {
     targetreverse=$(getent hosts "$targetip"|awk '{print $2}')
     echo "<!-- traceroute for $targetname / $targetreverse [$targetip] -->"
     IPS=($(gettraceroute4 "$targetip"))
-    for IP in "${IPS[@]}"; do
+    END=$(expr ${#IPS[@]} - 1)
+    for i in $(seq 0 $END); do
+    
+    IP=${IPS[i]}
+    NEXT_IP=${IPS[((i+1))]}
+
     getIP4location "$IP"
 	name=$(getent hosts "$IP" | awk '{print $2}')
-	if [ "$LONG" ] ; then
-	    LONGLAT="${LONG},${LAT} "
-	    LONGLATS="${LONGLATS}${LONGLAT}\n"
+	LONGLAT="${LONG},${LAT} "
 
-        ICON="jump"
+    getIP4location "$NEXT_IP"
+	NEXTLONGLAT="${LONG},${LAT} "
 
-        if [ "$IP" = "${IPS[0]}" ]; then
-            ICON="source"
-        fi
+    ICON="jump"
+    if [ "$IP" = "${IPS[0]}" ]; then
+        ICON="source"
+    fi
 
-	    if [ "$targetip" = "$IP" ]; then
+	if [ "$targetip" = "$IP" ]; then
 		labelname="$targetname"
         ICON="destination"
-	    else
+	else
 		labelname=""
-	    fi
-            cat <<EOF
+	fi
+    cat <<EOF
 <Placemark>
-  <name>$labelname</name>
-  <description>GeoIP position for $name [$IP]</description>
-  <styleUrl>#$ICON</styleUrl> 
-  <Point><coordinates>$LONGLAT</coordinates></Point>
+<name>$labelname</name>
+<description>GeoIP position for $name [$IP]</description>
+<styleUrl>#$ICON</styleUrl> 
+<Point><coordinates>$LONGLAT</coordinates></Point>
 </Placemark>
 EOF
-	else
-	    echo "<!-- missing GeoIP info for $name [$IP] -->"
-	fi
-    done;
 
-    echo "<Placemark><name>Path for $targetname / $targetreverse [$targetip]</name><LineString>"
-    echo "  <coordinates>"
-    #echo -e "${LONGLATS::-2}"
-    echo -e "$LONGLATS"
-    echo "  </coordinates></LineString></Placemark>"
-    echo
+    if [ $i -lt $END ]; then
+        cat <<EOF
+
+<Placemark> 
+<LineString>
+<coordinates>
+$LONGLAT
+$NEXTLONGLAT
+</coordinates>
+</LineString>
+<Style> 
+<LineStyle>  
+<color>#ff0000ff</color>
+</LineStyle> 
+</Style>
+</Placemark>
+
+EOF
+    fi
+done
 }
 
 footer() {
     cat <<FOOTER
-  </Document>
+</Document>
 </kml>
 FOOTER
 }
