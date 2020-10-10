@@ -32,11 +32,38 @@
 
 cachedir=cache
 
+default_gateway=$(netstat -rn | grep '^\(default\|0\.0\.0\.0\)' | awk '{print $2}')
+
 header() {
     cat <<HEADER
 <?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
-  <Document>
+<Document>
+
+<Style id="source">
+<IconStyle>
+<Icon>
+<href>etnasss.jpg</href>
+</Icon>
+</IconStyle>
+</Style>
+
+<Style id="jump">
+<IconStyle>
+<Icon>
+<href>etnasss.jpg</href>
+</Icon>
+</IconStyle>
+</Style>
+
+<Style id="destination">
+<IconStyle>
+<Icon>
+<href>etnasss.jpg</href>
+</Icon>
+</IconStyle>
+</Style>
+
 HEADER
 }
 
@@ -46,7 +73,7 @@ gettraceroute4() {
     if [ -s "$storename" ] ; then
 	cat "$storename"
     else
-	sudo tcptraceroute -n $1 | tee "$tmpname"
+    traceroute -T -n $1 | tee "$tmpname"
     fi |
 	tail -n +2 |
 	sed 's/\* //g' |
@@ -57,15 +84,17 @@ gettraceroute4() {
     fi
 }
 
-
-
 getIP4location() {
+    local C=""
+    
     if [ -e GeoIP-override.txt ] ; then
 	C="$(grep "^$IP " GeoIP-override.txt | cut -d"#" -f1)"
     fi
+   
     if [ -z "$C" ] && [ -e "$cachedir/GeoIP-cache.txt" ] ; then
-	C="$(grep "^$IP " "$cachedir/GeoIP-cache.txt")"
+    C=$(grep "^$IP " "$cachedir/GeoIP-cache.txt")
     fi
+
     if [ "$C" ]; then
 	LONG=$(echo "$C" |cut -d" " -f2)
 	LAT=$(echo "$C" |cut -d" " -f3)
@@ -80,11 +109,21 @@ getIP4location() {
 	#LAT=$(echo "$GEOIP" | cut -d, -f 7)
 	#echo $IP $LONG $LAT >> "$cachedir/GeoIP-cache.txt"
     #fi
-    LOCATION=$(curl -s 'https://freegeoip.live/json/$IP' | jq '.longitude, .latitude')
+    
+    if [ "$default_gateway" = "$IP" ]; then
+    url=https://freegeoip.live/json/
+    else
+    url=https://freegeoip.live/json/$IP
+    fi
+    
+    #echo -e "$url"
+    LOCATION=$(curl -s $url | jq -r '.longitude, .latitude')
+    #echo -e "$LOCATION"
     if [ "$LOCATION" ]; then
     read LONG LAT < <(echo $LOCATION)
     echo $IP $LONG $LAT >> "$cachedir/GeoIP-cache.txt"
     fi
+
 }
 
 tracehost() {
@@ -94,7 +133,7 @@ tracehost() {
     targetreverse=$(getent hosts "$targetip"|awk '{print $2}')
     echo "<!-- traceroute for $targetname / $targetreverse [$targetip] -->"
     for IP in $(gettraceroute4 "$targetip"); do
-	getIP4location "$IP"
+    getIP4location "$IP"
 	name=$(getent hosts "$IP" | awk '{print $2}')
 	if [ "$LONG" ] ; then
 	    LONGLAT="${LONG},${LAT} "
