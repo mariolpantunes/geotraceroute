@@ -57,6 +57,8 @@ gettraceroute4() {
     fi
 }
 
+
+
 getIP4location() {
     if [ -e GeoIP-override.txt ] ; then
 	C="$(grep "^$IP " GeoIP-override.txt | cut -d"#" -f1)"
@@ -70,13 +72,18 @@ getIP4location() {
 	return
     fi
     # Remove very inaccurate info
-    GEOIP=$(geoiplookup -f GeoLiteCity.dat $IP);
+    #GEOIP=$(geoiplookup -f GeoLiteCity.dat $IP);
     LONG=
     LAT=
-    if [ "$GEOIP" ] && [ "$(echo "$GEOIP" | grep -q "IP Address not found"; echo $?;)" != "0" ]; then
-	LONG=$(echo "$GEOIP" | cut -d, -f 8)
-	LAT=$(echo "$GEOIP" | cut -d, -f 7)
-	echo $IP $LONG $LAT >> "$cachedir/GeoIP-cache.txt"
+    #if [ "$GEOIP" ] && [ "$(echo "$GEOIP" | grep -q "IP Address not found"; echo $?;)" != "0" ]; then
+	#LONG=$(echo "$GEOIP" | cut -d, -f 8)
+	#LAT=$(echo "$GEOIP" | cut -d, -f 7)
+	#echo $IP $LONG $LAT >> "$cachedir/GeoIP-cache.txt"
+    #fi
+    LOCATION=$(curl -s 'https://freegeoip.live/json/$IP' | jq '.longitude, .latitude')
+    if [ "$LOCATION" ]; then
+    read LONG LAT < <(echo $LOCATION)
+    echo $IP $LONG $LAT >> "$cachedir/GeoIP-cache.txt"
     fi
 }
 
