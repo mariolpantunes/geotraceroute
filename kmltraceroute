@@ -138,21 +138,26 @@ tracehost() {
     done <<< "$RES"
 
     max=${RTLS[0]}
-    min=${RTLS[0]}
+    min=${RTLS[1]}
 
     for i in "${RTLS[@]}"; do
         #echo -e $i
         (( $(echo "$i > $max" |bc -l) )) && max=$i
-        (( $(echo "$i < $min" |bc -l) )) && min=$i
+        #(( $(echo "$i < $min" |bc -l) )) && min=$i
     done
 
     #echo "Max value is $max, minimal value is $min"
 
-    STEP=$(echo "($max-$min)/3.0" |bc -l)
+    STEP=$(echo "($max-$min)/5.0" |bc -l)
+    #echo -e "STEP = $STEP"
     THRES1=$(echo "$min + $STEP" |bc -l)
     #echo -e "THRES1 = $THRES1"
     THRES2=$(echo "$THRES1 + $STEP" |bc -l)
     #echo -e "THRES2 = $THRES2"
+    THRES3=$(echo "$THRES2 + $STEP" |bc -l)
+    #echo -e "THRES3 = $THRES3"
+    THRES4=$(echo "$THRES3 + $STEP" |bc -l)
+    #echo -e "THRES4 = $THRES4"
 
     END=$(expr ${#IPS[@]} - 1)
     for i in $(seq 0 $END); do
@@ -189,15 +194,22 @@ EOF
 
     if [ $i -lt $END ]; then
         RTL=${RTLS[((i+1))]}
-        
-        local COLOR="ff153eed"
+        local COLOR="ff3b55ed"
+       
+        if (( $(echo "$RTL <= $THRES4" |bc -l) )); then
+            COLOR="ff5cd5f6"
+        fi
+
+        if (( $(echo "$RTL <= $THRES3" |bc -l) )); then
+            COLOR="ffa3ae3c"
+        fi
 
         if (( $(echo "$RTL <= $THRES2" |bc -l) )); then
-            COLOR="ff06a1fc"
+            COLOR="ff9b6320"
         fi
 
         if (( $(echo "$RTL <= $THRES1" |bc -l) )); then
-            COLOR="ff1bd6c3"
+            COLOR="ff5f3f17"
         fi
 
         cat <<EOF
@@ -248,10 +260,12 @@ if [ -z "$1" ]; then
 fi
 
 header
-for h in "$@" ; do
+#echo -e "$@"
+#for h in "$@" ; do
     # Trace all locations if host have many IP addresses
-    for ip in $(host $h|awk '/has address/ {print $4}'); do
-	tracehost "$ip" "$h"
-    done
-done
+    #for ip in $(host $h|awk '/has address/ {print $4}'); do
+ip=($(host $1|awk '/has address/ {print $4}'))
+tracehost "${ip[0]}" "$h"
+    #done
+#done
 footer
