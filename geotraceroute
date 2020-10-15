@@ -143,14 +143,10 @@ tracehost() {
         local NEXT_IP=${IPS[((i+1))]}
 
         if [ $i -eq 0 ]; then
-        echo -e "First IP: $IP"
             local C=$(echo $IP | grep -E '^(192\.168|10\.|172\.1[6789]\.|172\.2[0-9]\.|172\.3[01]\.)')
-            echo -e "C=$C"
             if [ -z $C ]; then
-                echo -e "Not Private IP"
                 LONGLAT=$(get_ip_location "$IP")
             else
-                echo -e "Private IP"
                 LONGLAT=$(get_ip_location "$DG")
             fi
         else
@@ -159,10 +155,11 @@ tracehost() {
 
         if [ $i -lt $END ]; then
             NEXTLONGLAT=$(get_ip_location "$NEXT_IP")
+        else
+            NEXTLONGLAT=""
         fi 
 
         if [ "$NEXTLONGLAT" = "$LONGLAT" ]; then
-            #echo -e "SAME PLACE....."
             SAMEPLACE=true
         else
             ICON="jump"
