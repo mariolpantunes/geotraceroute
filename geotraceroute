@@ -1,9 +1,5 @@
 #! /bin/bash
 
-cachedir=cache
-
-default_gateway=$(netstat -rn | grep '^\(default\|0\.0\.0\.0\)' | awk '{print $2}')
-
 header() {
     cat <<HEADER
 <?xml version="1.0" encoding="UTF-8"?>
@@ -55,10 +51,10 @@ HEADER
 
 
 get_ip_location() {
+    local LONG=""
+    local LAT=""
     local C=""
     local IP=$1
-
-    echo -e "IP = $IP"
 
     if [ "$IP" = "_" ]; then
         echo "0,0 "
@@ -76,13 +72,11 @@ get_ip_location() {
     if [ "$C" ]; then
 	LONG=$(echo "$C" |cut -d" " -f2)
 	LAT=$(echo "$C" |cut -d" " -f3)
-	return
+    echo -e "$LONG,$LAT "
+	return 0
     fi
-
-    LONG=""
-    LAT=""
     
-    if [ "$default_gateway" = "$IP" ]; then
+    if [ "$DG" = "$IP" ]; then
     url=https://freegeoip.live/json/
     else
     url=https://freegeoip.live/json/$IP
@@ -100,27 +94,20 @@ get_ip_location() {
 
 tracehost() {
     local RES="$1"
-    echo -e "Trace Host..."
-
-    echo -e "RES(#1):"
-    echo -e "$RES"
-
     local LONGLATS=""
     local ICON=""
-    IPS=()
-    RTLS=()
+    local IPS=()
+    local RTLS=()
 
-    echo -e "Lines:"
     while IFS= read -r line; do
-    echo -e $line
-    IPS+=($(echo $line | awk '{print $1}'))
-    RTLS+=($(echo $line | awk '{print $2}'))
+        local IP=$(echo $line | awk '{print $1}')
+        IPS+=($IP)
+        if [ "$IP" = "_" ]; then 
+            RTLS+=("_")
+        else
+            RTLS+=($(echo $line | awk '{print $2}'))
+        fi
     done <<< "$RES"
-
-    echo -e "IPS:"
-    printf '%s\n' "${IPS[@]}"
-
-    
 
     # Remove missing RTL
     local END=$(expr ${#RTLS[@]} - 1)
@@ -133,90 +120,97 @@ tracehost() {
         fi
     done
 
-    echo -e "RTLS:"
-    printf '%s\n' "${RTLS[@]}"
-
+    # Find the min and max RTL
     max=${RTLS[0]}
     min=${RTLS[1]}
 
     for i in "${RTLS[@]}"; do
-        #echo -e $i
         (( $(echo "$i > $max" |bc -l) )) && max=$i
         #(( $(echo "$i < $min" |bc -l) )) && min=$i
     done
 
-    #echo "Max value is $max, minimal value is $min"
-
+    # Define five level color palette for RTL duration
     STEP=$(echo "($max-$min)/5.0" |bc -l)
-    #echo -e "STEP = $STEP"
     THRES1=$(echo "$min + $STEP" |bc -l)
-    #echo -e "THRES1 = $THRES1"
     THRES2=$(echo "$THRES1 + $STEP" |bc -l)
-    #echo -e "THRES2 = $THRES2"
     THRES3=$(echo "$THRES2 + $STEP" |bc -l)
-    #echo -e "THRES3 = $THRES3"
     THRES4=$(echo "$THRES3 + $STEP" |bc -l)
-    #echo -e "THRES4 = $THRES4"
 
     END=$(expr ${#IPS[@]} - 1)
+    local SAMEPLACE=false
     for i in $(seq 0 $END); do
-    
-    IP=${IPS[i]}
-    NEXT_IP=${IPS[((i+1))]}
+        local IP=${IPS[i]}
+        local NEXT_IP=${IPS[((i+1))]}
 
-    LONGLAT=$(get_ip_location "$IP")
-    echo -e "LONGLAT = $LONGLAT"
+        if [ $i -eq 0 ]; then
+        echo -e "First IP: $IP"
+            local C=$(echo $IP | grep -E '^(192\.168|10\.|172\.1[6789]\.|172\.2[0-9]\.|172\.3[01]\.)')
+            echo -e "C=$C"
+            if [ -z $C ]; then
+                echo -e "Not Private IP"
+                LONGLAT=$(get_ip_location "$IP")
+            else
+                echo -e "Private IP"
+                LONGLAT=$(get_ip_location "$DG")
+            fi
+        else
+            LONGLAT=$(get_ip_location "$IP")
+        fi
 
-	name=$(getent hosts "$IP" | awk '{print $2}')
+        if [ $i -lt $END ]; then
+            NEXTLONGLAT=$(get_ip_location "$NEXT_IP")
+        fi 
 
-    NEXTLONGLAT=$(get_ip_location "$NEXT_IP")
+        if [ "$NEXTLONGLAT" = "$LONGLAT" ]; then
+            #echo -e "SAME PLACE....."
+            SAMEPLACE=true
+        else
+            ICON="jump"
+            if [ "$IP" = "${IPS[0]}" ]; then
+                ICON="source"
+            fi
 
-    ICON="jump"
-    if [ "$IP" = "${IPS[0]}" ]; then
-        ICON="source"
-    fi
+            if $SAMEPLACE; then
+                ICON="loop"
+                SAMEPLACE=false
+            fi
 
-	if [ "$targetip" = "$IP" ]; then
-		labelname="$targetname"
-        ICON="destination"
-	else
-		labelname=""
-	fi
+            if [ "$LONGLAT" = "0,0 " ]; then
+                ICON="lost"
+            fi
 
-    if [ "$LONGLAT" = "0,0 " ]; then
-        ICON="lost"
-    fi
+	        if [ "$i" -eq "$END" ]; then
+		        ICON="destination"
+	        fi
 
-    cat <<EOF
+        cat <<EOF
 <Placemark>
-<name>$labelname</name>
-<description>GeoIP position for $name [$IP]</description>
 <styleUrl>#$ICON</styleUrl> 
 <Point><coordinates>$LONGLAT</coordinates></Point>
 </Placemark>
 EOF
 
-    if [ $i -lt $END ]; then
-        RTL=${RTLS[((i+1))]}
-        local COLOR="ff3b55ed"
+        if [ $i -lt $END ]; then
+            RTL=${RTLS[((i+1))]}
+            local COLOR="ff3b55ed"
        
-        if (( $(echo "$RTL <= $THRES4" |bc -l) )); then
-            COLOR="ff5cd5f6"
-        fi
+            if (( $(echo "$RTL <= $THRES4" |bc -l) )); then
+                COLOR="ff5cd5f6"
+            fi
 
-        if (( $(echo "$RTL <= $THRES3" |bc -l) )); then
-            COLOR="ffa3ae3c"
-        fi
+            if (( $(echo "$RTL <= $THRES3" |bc -l) )); then
+                COLOR="ffa3ae3c"
+            fi
 
-        if (( $(echo "$RTL <= $THRES2" |bc -l) )); then
-            COLOR="ff9b6320"
-        fi
+            if (( $(echo "$RTL <= $THRES2" |bc -l) )); then
+                COLOR="ff9b6320"
+            fi
 
-        if (( $(echo "$RTL <= $THRES1" |bc -l) )); then
-            COLOR="ff5f3f17"
-        fi
+            if (( $(echo "$RTL <= $THRES1" |bc -l) )); then
+                COLOR="ff5f3f17"
+            fi
 
-        cat <<EOF
+            cat <<EOF
 
 <Placemark> 
 <LineString>
@@ -233,6 +227,7 @@ $NEXTLONGLAT
 </Placemark>
 
 EOF
+        fi
     fi
 done
 }
@@ -244,6 +239,18 @@ footer() {
 FOOTER
 }
 
+# Print the help of traceroute
+for i in "$@"; do
+    case $i in
+    --help)
+    traceroute --help
+    exit 0
+    ;;
+    esac
+done
+
+cachedir=cache
+DG=$(netstat -rn | grep '^\(default\|0\.0\.0\.0\)' | awk '{print $2}')
 
 # Run the traceroute with the parameter defined by the user
 RET=$(traceroute -n $@ 2>&1)
@@ -256,9 +263,9 @@ fi
 
 # Filter the output of the traceroute 
 FILTERED=$(echo -e "$RET" | tail -n +2 | awk '{print $2" "$3}' | sed -r 's/\*/_/g')
-echo -e "$FILTERED"
+#echo -e "$FILTERED"
 
 # Output a valid KML
-#header
+header
 tracehost "$FILTERED"
-#footer
+footer
