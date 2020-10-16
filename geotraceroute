@@ -62,7 +62,7 @@ get_ip_location() {
     fi
     
     if [ -e GeoIP-override.txt ] ; then
-	C="$(grep "^$IP " GeoIP-override.txt | cut -d"#" -f1)"
+	C="$(grep -m 1 "^$IP " GeoIP-override.txt | cut -d"#" -f1)"
     fi
    
     if [ -z "$C" ] && [ -e "$cachedir/GeoIP-cache.txt" ] ; then
@@ -76,19 +76,27 @@ get_ip_location() {
 	return 0
     fi
     
+    local URL=""
     if [ "$DG" = "$IP" ]; then
-    url=https://freegeoip.live/json/
+        #URL=https://freegeoip.live/json/
+        URL=ipinfo.io
     else
-    url=https://freegeoip.live/json/$IP
+        #url=https://freegeoip.live/json/$IP
+        URL=ipinfo.io/$IP
     fi
     
-    LOCATION=$(curl -s $url | jq -r '.longitude, .latitude')
-    if [ "$LOCATION" ]; then
-    read LONG LAT < <(echo $LOCATION)
-    echo $IP $LONG $LAT >> "$cachedir/GeoIP-cache.txt"
-    echo -e "$LONG,$LAT "
-    return 0
+    LOCATION=$(curl -s -u $TOKEN: -H "Accept: application/json" $URL | jq -r '.loc')
+    if [ "$LOCATION" != "null" ]; then
+        LAT=$(echo $LOCATION | awk -F',' '{print $1}')
+        LONG=$(echo $LOCATION | awk -F',' '{print $2}')
+        echo $IP $LONG $LAT >> "$cachedir/GeoIP-cache.txt"
+        echo -e "$LONG,$LAT "
+        return 0
+    else
+        echo -e "0,0 "
+        return 0
     fi
+
     return 1
 }
 
@@ -247,6 +255,7 @@ for i in "$@"; do
 done
 
 cachedir=cache
+TOKEN="942f2f48ec5592"
 DG=$(netstat -rn | grep '^\(default\|0\.0\.0\.0\)' | awk '{print $2}')
 
 # Run the traceroute with the parameter defined by the user
