@@ -33,7 +33,7 @@ This project requires Python 3 and several external libraries.
 
 1.  **Clone the repository:**
     ```bash
-    git clone [https://github.com/YOUR_USERNAME/geotraceroute.git](https://github.com/YOUR_USERNAME/geotraceroute.git)
+    git clone git@github.com:mariolpantunes/geotraceroute.git
     cd geotraceroute
     ```
 
