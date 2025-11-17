@@ -176,7 +176,7 @@ def resolve_ip(ip, cache_file_path):
 
 def main(url, cache_file_path):
     if 'container' in os.environ:
-        command = f'flatpak-spawn --host traceroute -n -F -I -w 1 {url}'
+        command = f'flatpak-spawn --host traceroute -n -F -w 1 {url}'
     else:
         command = f'traceroute -n -F -w 1 {url}'
 
